@@ -10,6 +10,12 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Request Logging Middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 // Setup Multer for PDF uploads (memory storage)
 const storage = multer.memoryStorage();
 const upload = multer({ 
@@ -29,14 +35,23 @@ const ai = new GoogleGenAI({
 
 app.use(express.json());
 
+// API: Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // API: Summarize PDF
 app.post("/api/summarize", upload.single("pdf"), async (req, res, next) => {
   try {
+    console.log("Processing direct /api/summarize request");
+    
     if (!req.file) {
+      console.warn("No file uploaded");
       return res.status(400).json({ error: "No file uploaded" });
     }
 
     if (req.file.mimetype !== "application/pdf") {
+      console.warn(`Invalid file type: ${req.file.mimetype}`);
       return res.status(400).json({ error: "Only PDF files are allowed" });
     }
 
@@ -57,6 +72,7 @@ app.post("/api/summarize", upload.single("pdf"), async (req, res, next) => {
       for (const model of modelsToTry) {
         for (let i = 0; i <= retries; i++) {
           try {
+            console.log(`Attempting Gemini API call (model: ${model}, attempt: ${i + 1})`);
             return await ai.models.generateContent({
               model: model,
               contents: { parts: [pdfPart, { text: prompt }] },
@@ -67,11 +83,12 @@ app.post("/api/summarize", upload.single("pdf"), async (req, res, next) => {
             
             if (isTransient && i < retries) {
               const delay = Math.pow(2, i) * 1000;
-              console.log(`Retrying ${model} due to ${error.status || 'transient error'} (attempt ${i + 1})...`);
+              console.log(`Retrying ${model} due to transient error ${error.status || ''} (attempt ${i + 1})...`);
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
-            break; // Try next model if this one fails decisively or runs out of retries
+            console.log(`Model ${model} failed: ${error.message}`);
+            break; // Try next model
           }
         }
       }
@@ -87,6 +104,8 @@ app.post("/api/summarize", upload.single("pdf"), async (req, res, next) => {
 });
 
 async function startServer() {
+  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
+  
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -102,12 +121,12 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 
   // Global Error Handler
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("Global Error Handler:", err);
+    console.error("Global Error Handler Catch-all:", err);
     res.status(err.status || 500).json({ 
       error: err.message || "An unexpected server error occurred",
       details: process.env.NODE_ENV !== 'production' ? err.stack : undefined

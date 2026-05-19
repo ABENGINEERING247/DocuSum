@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { 
   FileText, 
   Upload, 
@@ -23,8 +23,16 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check backend health on mount
+  useEffect(() => {
+    fetch("/api/health")
+      .then(r => r.ok ? setBackendReady(true) : setBackendReady(false))
+      .catch(() => setBackendReady(false));
+  }, []);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -86,13 +94,18 @@ export default function App() {
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
         console.error("Non-JSON response:", text);
-        throw new Error(`Server returned non-JSON response (${response.status}). The server might be down or experiencing issues.`);
+        
+        // Try to find status code in text if possible or just show status
+        if (response.status === 404) {
+          throw new Error("The summarization service (API) could not be found (404). This might be a temporary routing issue. Please refresh and try again.");
+        }
+        throw new Error(`Server returned a non-JSON response (${response.status}). This usually means the server is restarting or encountered a critical error.`);
       }
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Something went wrong");
+        throw new Error(data.error || "Something went wrong while processing the document.");
       }
 
       setResult(data.summary);
