@@ -1,0 +1,6 @@
+{
+  "name": "DocuSum PDF",
+  "description": "An AI-powered document assistant that extracts and summarizes content from PDF files instantly.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
