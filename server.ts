@@ -30,7 +30,7 @@ const ai = new GoogleGenAI({
 app.use(express.json());
 
 // API: Summarize PDF
-app.post("/api/summarize", upload.single("pdf"), async (req, res) => {
+app.post("/api/summarize", upload.single("pdf"), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -103,6 +103,15 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // Global Error Handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Global Error Handler:", err);
+    res.status(err.status || 500).json({ 
+      error: err.message || "An unexpected server error occurred",
+      details: process.env.NODE_ENV !== 'production' ? err.stack : undefined
+    });
   });
 }
 
